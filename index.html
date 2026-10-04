@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chapter 1 - The Legend Of The Beast</title>
+    <!-- Tailwind CSS for modern HUD & UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js CDN for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #08070d;
+            color: #f1f5f9;
+        }
+        .cinzel {
+            font-family: 'Cinzel', serif;
+        }
+        canvas#gameCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        /* Custom UI Glassmorphism & Borders */
+        .ui-panel {
+            background: rgba(15, 12, 28, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+        }
+        .ui-gold-border {
+            border: 2px solid #d4af37;
+            box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+        }
+        .ui-purple-glow {
+            box-shadow: 0 0 15px rgba(147, 51, 234, 0.5);
+        }
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d4af37;
+            border-radius: 3px;
+        }
+        .health-bar-fill {
+            transition: width 0.2s ease-out;
+        }
+        .enemy-hp-overlay {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="select-none relative overflow-hidden bg-slate-950">
+
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD Layer -->
+    <div id="hudOverlay" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-10">
+        <!-- Top Bar: Player Stats & Mini-map -->
+        <div class="flex justify-between items-start w-full">
+            <!-- Player Bar -->
+            <div class="ui-panel p-3 rounded-xl flex items-center space-x-4 pointer-events-auto max-w-xs sm:max-w-md w-full">
+                <div class="relative">
+                    <div id="playerAvatar" class="w-14 h-14 rounded-full border-2 border-amber-400 bg-slate-800 flex items-center justify-center text-2xl shadow-lg overflow-hidden">
+                        🦁
+                    </div>
+                    <span id="playerLevelBadge" class="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 font-bold text-xs px-2 py-0.5 rounded-full border border-amber-300">
+                        Lv.1
+                    </span>
+                </div>
+                <div class="flex-1 space-y-1">
+                    <div class="flex justify-between text-xs font-bold text-amber-200">
+                        <span id="playerName">Beastiee</span>
+                        <span id="playerClassTitle" class="text-purple-300">Humble Scholar</span>
+                    </div>
+                    <!-- HP Bar -->
+                    <div class="w-full bg-slate-900 h-3.5 rounded-full overflow-hidden border border-slate-700 relative">
+                        <div id="hpFill" class="bg-gradient-to-r from-red-600 to-emerald-500 h-full health-bar-fill" style="width: 100%;"></div>
+                        <span id="hpText" class="absolute inset-0 text-[10px] flex items-center justify-center font-bold text-white drop-shadow">100 / 100</span>
+                    </div>
+                    <!-- MP Bar -->
+                    <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-700 relative">
+                        <div id="mpFill" class="bg-gradient-to-r from-blue-600 to-indigo-400 h-full health-bar-fill" style="width: 100%;"></div>
+                        <span id="mpText" class="absolute inset-0 text-[9px] flex items-center justify-center font-bold text-white drop-shadow">50 / 50</span>
+                    </div>
+                    <!-- EXP Bar -->
+                    <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-800">
+                        <div id="expFill" class="bg-amber-400 h-full health-bar-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mini Map & Menu Buttons -->
+            <div class="flex flex-col items-end space-y-2 pointer-events-auto">
+                <div class="w-28 h-28 sm:w-36 sm:h-36 ui-panel rounded-full relative overflow-hidden border-2 border-amber-500/60 shadow-xl">
+                    <canvas id="minimapCanvas" class="w-full h-full"></canvas>
+                    <div class="absolute inset-0 rounded-full border border-amber-400/20 pointer-events-none"></div>
+                    <div class="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-amber-300 uppercase tracking-widest bg-slate-950/70 px-1.5 rounded">
+                        Radar
+                    </div>
+                </div>
+                <!-- Menu Toggle Buttons -->
+                <div class="flex space-x-2">
+                    <button id="btnInventory" onclick="toggleModal('inventoryModal')" class="ui-panel p-2.5 rounded-lg text-amber-300 hover:text-white hover:border-amber-400 transition" title="Inventory [I]">
+                        <i class="fa-solid fa-briefcase text-lg"></i>
+                    </button>
+                    <button id="btnStats" onclick="toggleModal('statsModal')" class="ui-panel p-2.5 rounded-lg text-amber-300 hover:text-white hover:border-amber-400 transition" title="Character Stats [C]">
+                        <i class="fa-solid fa-user-shield text-lg"></i>
+                    </button>
+                    <button id="btnSkills" onclick="toggleModal('skillsModal')" class="ui-panel p-2.5 rounded-lg text-amber-300 hover:text-white hover:border-amber-400 transition" title="Skill Tree [K]">
+                        <i class="fa-solid fa-wand-magic-sparkles text-lg"></i>
+                    </button>
+                    <button id="btnStoryLog" onclick="toggleModal('storyModal')" class="ui-panel p-2.5 rounded-lg text-amber-300 hover:text-white hover:border-amber-400 transition" title="Story & Quests [L]">
+                        <i class="fa-solid fa-book-open text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quest Objective Widget (Right Side Overlay) -->
+        <div class="self-end my-auto pointer-events-auto max-w-xs w-full hidden sm:block">
+            <div class="ui-panel p-3 rounded-xl border-l-4 border-amber-500 space-y-1">
+                <div class="flex items-center space-x-2 text-xs font-bold text-amber-400 uppercase tracking-wider">
+                    <i class="fa-solid fa-compass"></i>
+                    <span>Active Objective</span>
+                </div>
+                <h4 id="questTitle" class="text-sm font-bold text-white cinzel">Talk to Polymer</h4>
+                <p id="questDesc" class="text-xs text-slate-300">Find Wizard Polymer near the Home Town Rolling School fountain.</p>
+            </div>
+        </div>
+
+        <!-- Bottom Controls & Quick Hotbars -->
+        <div class="flex justify-between items-end w-full">
+            <!-- Mobile Movement Touch Joystick Container -->
+            <div id="touchZone" class="pointer-events-auto w-32 h-32 rounded-full border-2 border-slate-700/50 bg-slate-900/40 relative flex items-center justify-center sm:hidden">
+                <div id="touchKnob" class="w-12 h-12 rounded-full bg-amber-500/50 border border-amber-300 absolute"></div>
+            </div>
+
+            <!-- Action Hotbar / Ability Buttons -->
+            <div class="pointer-events-auto flex items-center space-x-3 mx-auto">
+                <button id="btnAttack" onclick="triggerPlayerAttack()" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-400 border-2 border-amber-200 text-slate-950 font-black text-xl shadow-lg active:scale-95 transition flex flex-col items-center justify-center">
+                    <i class="fa-solid fa-hand-fist"></i>
+                    <span class="text-[9px] uppercase tracking-tighter">Attack [Space]</span>
+                </button>
+                <button id="btnSkill1" onclick="castSkill(1)" class="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-900/80 border-2 border-purple-500 text-purple-300 font-bold hover:bg-purple-900/50 transition flex flex-col items-center justify-center relative">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span class="text-[8px] mt-0.5">Karma [1]</span>
+                </button>
+                <button id="btnSkill2" onclick="castSkill(2)" class="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-900/80 border-2 border-blue-500 text-blue-300 font-bold hover:bg-blue-900/50 transition flex flex-col items-center justify-center relative">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span class="text-[8px] mt-0.5">Humility [2]</span>
+                </button>
+                <button id="btnPotion" onclick="usePotion()" class="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-900/80 border-2 border-emerald-500 text-emerald-300 font-bold hover:bg-emerald-900/50 transition flex flex-col items-center justify-center relative">
+                    <i class="fa-solid fa-flask"></i>
+                    <span id="potionCountBadge" class="absolute -top-1 -right-1 bg-emerald-500 text-slate-950 font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center">3</span>
+                    <span class="text-[8px] mt-0.5">Heal [3]</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialogue & Interaction Popup Box -->
+    <div id="dialogueModal" class="absolute bottom-6 left-1/2 -translate-x-1/2 w-11/12 max-w-2xl ui-panel p-5 rounded-2xl border-2 border-amber-400 z-30 hidden flex-col space-y-3">
+        <div class="flex items-center space-x-3 border-b border-amber-500/30 pb-2">
+            <div id="npcPortrait" class="w-12 h-12 rounded-full bg-purple-900 border border-purple-300 flex items-center justify-center text-2xl">
+                🧙‍♂️
+            </div>
+            <div>
+                <h3 id="npcName" class="text-base font-bold text-amber-400 cinzel">Wizard Polymer</h3>
+                <p id="npcTitle" class="text-xs text-purple-300">Guardian of Humility & Karma</p>
+            </div>
+        </div>
+        <p id="dialogueText" class="text-sm text-slate-200 leading-relaxed italic">
+            "Why do you stand there sad and lonely, Beastiee?"
+        </p>
+        <div id="dialogueActions" class="flex justify-end space-x-3 pt-2">
+            <button onclick="advanceDialogue()" class="px-5 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 text-slate-950 font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 transition">
+                Continue <i class="fa-solid fa-arrow-right ml-1"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Inventory Modal -->
+    <div id="inventoryModal" class="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-40 hidden flex items-center justify-center p-4">
+        <div class="ui-panel max-w-md w-full rounded-2xl p-6 border border-amber-500/50 flex flex-col space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                <h2 class="text-xl font-bold text-amber-400 cinzel flex items-center gap-2">
+                    <i class="fa-solid fa-briefcase"></i> Inventory & Gear
+                </h2>
+                <button onclick="toggleModal('inventoryModal')" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <!-- Equipment slots -->
+            <div class="grid grid-cols-3 gap-3">
+                <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-700 text-center">
+                    <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Weapon</span>
+                    <i class="fa-solid fa-wand-magic text-amber-400 text-xl my-1"></i>
+                    <p id="gearWeapon" class="text-xs font-semibold text-slate-200">Scholar Wand</p>
+                </div>
+                <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-700 text-center">
+                    <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Armor</span>
+                    <i class="fa-solid fa-shirt text-blue-400 text-xl my-1"></i>
+                    <p id="gearArmor" class="text-xs font-semibold text-slate-200">School Robe</p>
+                </div>
+                <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-700 text-center">
+                    <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Accessory</span>
+                    <i class="fa-solid fa-gem text-purple-400 text-xl my-1"></i>
+                    <p id="gearAccessory" class="text-xs font-semibold text-slate-200">Polymer's Charm</p>
+                </div>
+            </div>
+
+            <!-- Item Grid -->
+            <div>
+                <h3 class="text-xs font-bold text-amber-300 uppercase mb-2">Backpack Items</h3>
+                <div id="inventoryGrid" class="grid grid-cols-4 gap-2">
+                    <!-- Dynamic slots -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Character Stats Modal -->
+    <div id="statsModal" class="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-40 hidden flex items-center justify-center p-4">
+        <div class="ui-panel max-w-md w-full rounded-2xl p-6 border border-amber-500/50 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                <h2 class="text-xl font-bold text-amber-400 cinzel flex items-center gap-2">
+                    <i class="fa-solid fa-user-shield"></i> Character Attributes
+                </h2>
+                <button onclick="toggleModal('statsModal')" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div class="flex justify-between bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span class="text-slate-400">Class Stance</span>
+                    <span id="statClass" class="text-purple-300 font-bold">Humble Scholar</span>
+                </div>
+                <div class="flex justify-between bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span class="text-slate-400">Attack Power</span>
+                    <span id="statAtk" class="text-amber-400 font-bold">15</span>
+                </div>
+                <div class="flex justify-between bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span class="text-slate-400">Defense</span>
+                    <span id="statDef" class="text-blue-400 font-bold">8</span>
+                </div>
+                <div class="flex justify-between bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span class="text-slate-400">Emotional Quotient (Karma Boost)</span>
+                    <span id="statEQ" class="text-emerald-400 font-bold">120%</span>
+                </div>
+                <div class="flex justify-between bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span class="text-slate-400">Available Attribute Points</span>
+                    <span id="statPoints" class="text-amber-300 font-bold">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skill Tree Modal -->
+    <div id="skillsModal" class="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-40 hidden flex items-center justify-center p-4">
+        <div class="ui-panel max-w-md w-full rounded-2xl p-6 border border-amber-500/50 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                <h2 class="text-xl font-bold text-amber-400 cinzel flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Class Skill Tree
+                </h2>
+                <button onclick="toggleModal('skillsModal')" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3">
+                <div class="p-3 bg-slate-900/80 rounded-xl border border-purple-500/40 flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-lg bg-purple-900/60 border border-purple-400 flex items-center justify-center text-purple-300 font-bold">
+                        <i class="fa-solid fa-bolt"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="text-xs font-bold text-amber-300">Karma Retribution (Active)</h4>
+                        <p class="text-[11px] text-slate-300">Deals magical area damage to bullies reflecting bad karma.</p>
+                    </div>
+                </div>
+                <div class="p-3 bg-slate-900/80 rounded-xl border border-blue-500/40 flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-900/60 border border-blue-400 flex items-center justify-center text-blue-300 font-bold">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="text-xs font-bold text-amber-300">Humility Aura (Buff)</h4>
+                        <p class="text-[11px] text-slate-300">Boosts defense and slowly regenerates health over 8 seconds.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Story & Lore Modal -->
+    <div id="storyModal" class="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-40 hidden flex items-center justify-center p-4">
+        <div class="ui-panel max-w-lg w-full rounded-2xl p-6 border border-amber-500/50 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                <h2 class="text-lg font-bold text-amber-400 cinzel">
+                    Chapter 1: Bedtime Stories - The Legend Of The Beast
+                </h2>
+                <button onclick="toggleModal('storyModal')" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="text-xs text-slate-300 space-y-3 leading-relaxed font-serif">
+                <p class="text-amber-200/80 italic text-center">Written by: Wolcram Mayers And "The Rages Band" — Feb 11, 2020</p>
+                <p>
+                    Once upon a time, there came a needy friend named Beastiee at "Home Town Rolling School". He was teased relentlessly by classmates who called his face ugly and beast-like. Frustrated and lonely, Beastiee struggled to find true, humble friends.
+                </p>
+                <p>
+                    Suddenly, the wise Wizard Polymer appeared. He reminded Beastiee to maintain a good heart, humility, and confidence, assuring him that bad karma would soon catch up to the arrogant bullies.
+                </p>
+                <p>
+                    When the classmates continued their cruelty, Polymer transformed the disrespectful bullies into actual wild Beasts, while granting Beastiee a handsome face and true intelligent friends.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Completion / Moral Lesson Modal Popup -->
+    <div id="moralModal" class="absolute inset-0 bg-slate-950/90 backdrop-blur-xl z-50 hidden flex items-center justify-center p-4">
+        <div class="ui-panel max-w-xl w-full rounded-2xl p-8 border-2 border-amber-400 ui-purple-glow text-center space-y-5 animate-bounce-in">
+            <div class="w-20 h-20 mx-auto rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center text-4xl text-amber-300">
+                ✨
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-black text-amber-400 cinzel tracking-wide">
+                Transformation Complete!
+            </h2>
+            <p class="text-xs text-purple-300 uppercase tracking-widest font-bold">Moral Lesson of the Story</p>
+            <blockquote class="text-sm text-slate-200 italic p-4 bg-slate-900/80 rounded-xl border border-slate-800 leading-relaxed text-left">
+                "Don't judge a person whom even disgusts, fake, conceited, tease, bully you as a friend. Because face can't be measured whether your ugly or handsome and beautiful. But the thing is you don't give up yourself to live. Cause the good and bad karma can pass the emotional consistency you need to respect. And be confident to fight all those bullies. And whenever you make struggles or dejection make friends with humble factors."
+            </blockquote>
+            <button onclick="restartGame()" class="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black text-sm uppercase tracking-wider hover:brightness-110 active:scale-95 transition shadow-lg">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /* GAME STATE MANAGEMENT */
+        const gameState = {
+            player: {
+                hp: 100,
+                maxHp: 100,
+                mp: 50,
+                maxMp: 50,
+                level: 1,
+                exp: 0,
+                maxExp: 100,
+                atk: 18,
+                def: 8,
+                potions: 3,
+                classTitle: "Humble Scholar",
+                isHandsome: false,
+                position: new THREE.Vector3(0, 0, 15),
+                rotation: 0
+            },
+            questStage: 0, // 0: Speak to Polymer, 1: Confront Bullies, 2: Defeat Beasts, 3: Final Wish
+            dialogueIndex: 0,
+            dialogueList: [],
+            enemies: [],
+            projectiles: [],
+            particles: [],
+            keys: {},
+            touchJoystick: { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 }
+        };
+
+        const quests = [
+            { title: "Find Wizard Polymer", desc: "Locate Wizard Polymer near the Home Town Rolling School main courtyard." },
+            { title: "Confront the Bullies", desc: "Walk over to the arrogant classmates and stand your ground." },
+            { title: "Defeat the Karma Beasts", desc: "Polymer's curse turned the bullies into Beasts! Defeat them in combat!" },
+            { title: "Return to Polymer", desc: "Speak with Wizard Polymer to claim your final wish and transformation." }
+        ];
+
+        /* THREE.JS SETUP */
+        let scene, camera, renderer;
+        let playerMesh, polymerMesh;
+        let minimapCtx;
+
+        function initEngine() {
+            const container = document.getElementById('gameCanvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f0b1e);
+            scene.fog = new THREE.FogExp2(0x0f0b1e, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ canvas: container, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xd8b4fe, 0.6);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfef08a, 1.2);
+            sunLight.position.set(30, 50, 20);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+
+            // Minimap setup
+            const minimapCanvas = document.getElementById('minimapCanvas');
+            minimapCanvas.width = 150;
+            minimapCanvas.height = 150;
+            minimapCtx = minimapCanvas.getContext('2d');
+
+            buildWorld();
+
+            createPlayerMesh();
+            createPolymerNPC();
+            spawnBullies();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            setupInput();
+
+            // Start Game Loop
+            animate();
+        }
+
+        function buildWorld() {
+            // Ground Grass
+            const groundGeo = new THREE.PlaneGeometry(150, 150);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Grid Pathways
+            const pathGeo = new THREE.PlaneGeometry(20, 100);
+            const pathMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+            const path = new THREE.Mesh(pathGeo, pathMat);
+            path.rotation.x = -Math.PI / 2;
+            path.position.y = 0.01;
+            scene.add(path);
+
+            // Main School Building
+            const schoolGroup = new THREE.Group();
+            const mainBuildingGeo = new THREE.BoxGeometry(40, 18, 20);
+            const mainBuildingMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+            const mainBuilding = new THREE.Mesh(mainBuildingGeo, mainBuildingMat);
+            mainBuilding.position.set(0, 9, -35);
+            mainBuilding.castShadow = true;
+            schoolGroup.add(mainBuilding);
+
+            // School Roof
+            const roofGeo = new THREE.ConeGeometry(28, 8, 4);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.set(0, 22, -35);
+            roof.rotation.y = Math.PI / 4;
+            schoolGroup.add(roof);
+
+            scene.add(schoolGroup);
+
+            // Decorative Trees & Pillars
+            for (let i = 0; i < 16; i++) {
+                const tree = new THREE.Group();
+                const trunk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.5, 0.7, 4),
+                    new THREE.MeshStandardMaterial({ color: 0x451a03 })
+                );
+                trunk.position.y = 2;
+                const leaves = new THREE.Mesh(
+                    new THREE.DodecahedronGeometry(2.5),
+                    new THREE.MeshStandardMaterial({ color: 0x065f46 })
+                );
+                leaves.position.y = 5;
+                tree.add(trunk, leaves);
+
+                const angle = (i / 16) * Math.PI * 2;
+                const dist = 35 + Math.random() * 10;
+                tree.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+                scene.add(tree);
+            }
+
+            // Courtyard Magic Fountain
+            const fountainGeo = new THREE.CylinderGeometry(4, 5, 1.2, 12);
+            const fountainMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+            const fountain = new THREE.Mesh(fountainGeo, fountainMat);
+            fountain.position.set(0, 0.6, 0);
+            scene.add(fountain);
+        }
+
+        function createPlayerMesh() {
+            const group = new THREE.Group();
+            
+            // Body
+            const bodyGeo = new THREE.CylinderGeometry(0.6, 0.8, 2.2, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.1;
+            group.add(body);
+
+            // Head / Face
+            const headGeo = new THREE.SphereGeometry(0.6, 16, 16);
+            const headMat = new THREE.MeshStandardMaterial({ color: gameState.player.isHandsome ? 0xfde047 : 0x78716c });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.5;
+            group.add(head);
+
+            // Weapon
+            const wandGeo = new THREE.CylinderGeometry(0.08, 0.08, 2);
+            const wandMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, emissive: 0xd4af37, emissiveIntensity: 0.5 });
+            const wand = new THREE.Mesh(wandGeo, wandMat);
+            wand.rotation.z = Math.PI / 4;
+            wand.position.set(0.8, 1.5, 0.3);
+            group.add(wand);
+
+            group.position.copy(gameState.player.position);
+            scene.add(group);
+            playerMesh = group;
+        }
+
+        function updatePlayerVisuals() {
+            if (playerMesh) {
+                scene.remove(playerMesh);
+                createPlayerMesh();
+            }
+        }
+
+        function createPolymerNPC() {
+            const group = new THREE.Group();
+            
+            // Robe
+            const robeGeo = new THREE.ConeGeometry(1, 3, 8);
+            const robeMat = new THREE.MeshStandardMaterial({ color: 0x6b21a8 });
+            const robe = new THREE.Mesh(robeGeo, robeMat);
+            robe.position.y = 1.5;
+            group.add(robe);
+
+            // Wizard Hat
+            const hatGeo = new THREE.ConeGeometry(0.8, 1.8, 8);
+            const hatMat = new THREE.MeshStandardMaterial({ color: 0x4c1d95 });
+            const hat = new THREE.Mesh(hatGeo, hatMat);
+            hat.position.y = 3.5;
+            group.add(hat);
+
+            // Aura Glow Particle Ring
+            const auraGeo = new THREE.RingGeometry(1.2, 1.6, 16);
+            const auraMat = new THREE.MeshBasicMaterial({ color: 0xc084fc, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+            const aura = new THREE.Mesh(auraGeo, auraMat);
+            aura.rotation.x = Math.PI / 2;
+            aura.position.y = 0.1;
+            group.add(aura);
+
+            group.position.set(5, 0, -5);
+            scene.add(group);
+            polymerMesh = group;
+        }
+
+        function spawnBullies() {
+            // Clear existing
+            gameState.enemies.forEach(e => scene.remove(e.mesh));
+            gameState.enemies = [];
+
+            const bullyPositions = [
+                new THREE.Vector3(-8, 0, -10),
+                new THREE.Vector3(-12, 0, -6),
+                new THREE.Vector3(-10, 0, -14)
+            ];
+
+            bullyPositions.forEach((pos, idx) => {
+                const group = new THREE.Group();
+                const isBeast = gameState.questStage >= 2;
+
+                if (!isBeast) {
+                    // Human Classmate Bully
+                    const body = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.6, 0.6, 2),
+                        new THREE.MeshStandardMaterial({ color: 0xd97706 })
+                    );
+                    body.position.y = 1;
+                    group.add(body);
+                } else {
+                    // Transformed Beast Enemy
+                    const beastBody = new THREE.Mesh(
+                        new THREE.BoxGeometry(1.8, 1.8, 2.2),
+                        new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.3 })
+                    );
+                    beastBody.position.y = 1.2;
+                    group.add(beastBody);
+
+                    // Red Glowing Eyes
+                    const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
+                    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                    const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
+                    eye1.position.set(0.4, 1.6, 1.1);
+                    const eye2 = eye1.clone();
+                    eye2.position.x = -0.4;
+                    group.add(eye1, eye2);
+                }
+
+                group.position.copy(pos);
+                scene.add(group);
+
+                gameState.enemies.push({
+                    mesh: group,
+                    hp: isBeast ? 60 : 30,
+                    maxHp: isBeast ? 60 : 30,
+                    isBeast: isBeast,
+                    name: isBeast ? `Karma Beast #${idx+1}` : `Bully Classmate #${idx+1}`
+                });
+            });
+        }
+
+        function setupInput() {
+            window.addEventListener('keydown', (e) => {
+                gameState.keys[e.key.toLowerCase()] = true;
+                if (e.key === ' ') triggerPlayerAttack();
+                if (e.key === '1') castSkill(1);
+                if (e.key === '2') castSkill(2);
+                if (e.key === '3') usePotion();
+                if (e.key.toLowerCase() === 'i') toggleModal('inventoryModal');
+                if (e.key.toLowerCase() === 'c') toggleModal('statsModal');
+                if (e.key.toLowerCase() === 'k') toggleModal('skillsModal');
+                if (e.key.toLowerCase() === 'l') toggleModal('storyModal');
+            });
+
+            window.addEventListener('keyup', (e) => {
+                gameState.keys[e.key.toLowerCase()] = false;
+            });
+
+            // Touch Joystick Setup
+            const touchZone = document.getElementById('touchZone');
+            const touchKnob = document.getElementById('touchKnob');
+
+            touchZone.addEventListener('touchstart', (e) => {
+                gameState.touchJoystick.active = true;
+                const touch = e.touches[0];
+                const rect = touchZone.getBoundingClientRect();
+                gameState.touchJoystick.startX = rect.left + rect.width / 2;
+                gameState.touchJoystick.startY = rect.top + rect.height / 2;
+            });
+
+            touchZone.addEventListener('touchmove', (e) => {
+                if (!gameState.touchJoystick.active) return;
+                const touch = e.touches[0];
+                const dx = touch.clientX - gameState.touchJoystick.startX;
+                const dy = touch.clientY - gameState.touchJoystick.startY;
+                const dist = Math.min(Math.hypot(dx, dy), 40);
+                const angle = Math.atan2(dy, dx);
+
+                gameState.touchJoystick.moveX = Math.cos(angle) * (dist / 40);
+                gameState.touchJoystick.moveY = Math.sin(angle) * (dist / 40);
+
+                touchKnob.style.transform = `translate(${gameState.touchJoystick.moveX * 30}px, ${gameState.touchJoystick.moveY * 30}px)`;
+            });
+
+            touchZone.addEventListener('touchend', () => {
+                gameState.touchJoystick.active = false;
+                gameState.touchJoystick.moveX = 0;
+                gameState.touchJoystick.moveY = 0;
+                touchKnob.style.transform = 'translate(0px, 0px)';
+            });
+        }
+
+        function updatePlayerMovement() {
+            const speed = 0.25;
+            let moveX = 0;
+            let moveZ = 0;
+
+            if (gameState.keys['w'] || gameState.keys['arrowup']) moveZ -= 1;
+            if (gameState.keys['s'] || gameState.keys['arrowdown']) moveZ += 1;
+            if (gameState.keys['a'] || gameState.keys['arrowleft']) moveX -= 1;
+            if (gameState.keys['d'] || gameState.keys['arrowright']) moveX += 1;
+
+            if (gameState.touchJoystick.active) {
+                moveX = gameState.touchJoystick.moveX;
+                moveZ = gameState.touchJoystick.moveY;
+            }
+
+            if (moveX !== 0 || moveZ !== 0) {
+                const moveVec = new THREE.Vector3(moveX, 0, moveZ).normalize().multiplyScalar(speed);
+                gameState.player.position.add(moveVec);
+
+                // Rotate player towards movement
+                const angle = Math.atan2(moveX, moveZ);
+                playerMesh.rotation.y = angle;
+            }
+
+            playerMesh.position.copy(gameState.player.position);
+
+            // Camera third-person tracking
+            camera.position.set(
+                gameState.player.position.x,
+                gameState.player.position.y + 12,
+                gameState.player.position.z + 18
+            );
+            camera.lookAt(gameState.player.position);
+
+            // Quest Proximity Check
+            checkQuestProximities();
+        }
+
+        function checkQuestProximities() {
+            const pPos = gameState.player.position;
+
+            if (gameState.questStage === 0) {
+                // Near Polymer
+                if (pPos.distanceTo(polymerMesh.position) < 4) {
+                    startDialogue("Wizard Polymer", "🧙‍♂️", [
+                        "Why stand there sad and lonely, Beastiee?",
+                        "Because my classmates conceal me and say my face looks like a beast...",
+                        "Do not worry. Humility and confidence will prove your worth. Good and bad karma will soon act!"
+                    ], () => {
+                        advanceQuestStage(1);
+                    });
+                }
+            } else if (gameState.questStage === 1) {
+                // Near Bullies
+                const bullyPos = new THREE.Vector3(-10, 0, -10);
+                if (pPos.distanceTo(bullyPos) < 5) {
+                    startDialogue("Bully Classmates", "😾", [
+                        "Hahaha! Look at the beast with no friends!",
+                        "Stop! Always obey and respect each other!",
+                        "We don't care! Polymer, turn them into Beasts!"
+                    ], () => {
+                        spawnBullies();
+                        advanceQuestStage(2);
+                    });
+                }
+            } else if (gameState.questStage === 3) {
+                // Return to Polymer
+                if (pPos.distanceTo(polymerMesh.position) < 4) {
+                    startDialogue("Wizard Polymer", "🧙‍♂️", [
+                        "You have stood humble and brave against bad karma!",
+                        "As promised, I grant you a handsome face and true intelligent friends."
+                    ], () => {
+                        gameState.player.isHandsome = true;
+                        gameState.player.classTitle = "Handsome Hero";
+                        updatePlayerVisuals();
+                        document.getElementById('moralModal').classList.remove('hidden');
+                    });
+                }
+            }
+        }
+
+        function advanceQuestStage(stage) {
+            gameState.questStage = stage;
+            const q = quests[stage];
+            document.getElementById('questTitle').innerText = q.title;
+            document.getElementById('questDesc').innerText = q.desc;
+        }
+
+        function startDialogue(speaker, icon, lines, onComplete) {
+            if (document.getElementById('dialogueModal').classList.contains('flex')) return;
+
+            document.getElementById('npcName').innerText = speaker;
+            document.getElementById('npcPortrait').innerText = icon;
+            gameState.dialogueList = lines;
+            gameState.dialogueIndex = 0;
+            gameState.onDialogueComplete = onComplete;
+
+            document.getElementById('dialogueText').innerText = `"${lines[0]}"`;
+            document.getElementById('dialogueModal').classList.remove('hidden');
+            document.getElementById('dialogueModal').classList.add('flex');
+        }
+
+        function advanceDialogue() {
+            gameState.dialogueIndex++;
+            if (gameState.dialogueIndex < gameState.dialogueList.length) {
+                document.getElementById('dialogueText').innerText = `"${gameState.dialogueList[gameState.dialogueIndex]}"`;
+            } else {
+                document.getElementById('dialogueModal').classList.add('hidden');
+                document.getElementById('dialogueModal').classList.remove('flex');
+                if (gameState.onDialogueComplete) gameState.onDialogueComplete();
+            }
+        }
+
+        function triggerPlayerAttack() {
+            // Particle Slash Effect
+            createVisualEffect(playerMesh.position, 0xf59e0b);
+
+            gameState.enemies.forEach(enemy => {
+                const dist = playerMesh.position.distanceTo(enemy.mesh.position);
+                if (dist < 4) {
+                    const dmg = gameState.player.atk + Math.floor(Math.random() * 8);
+                    enemy.hp -= dmg;
+                    createFloatingText(`-${dmg}`, enemy.mesh.position, '#ef4444');
+
+                    if (enemy.hp <= 0) {
+                        scene.remove(enemy.mesh);
+                        gameState.player.exp += 35;
+                        checkLevelUp();
+                    }
+                }
+            });
+
+            // Check if all beasts defeated
+            if (gameState.questStage === 2) {
+                const remaining = gameState.enemies.filter(e => e.hp > 0);
+                if (remaining.length === 0) {
+                    advanceQuestStage(3);
+                }
+            }
+
+            updateHUD();
+        }
+
+        function castSkill(skillNum) {
+            if (skillNum === 1) { // Karma Retribution
+                if (gameState.player.mp < 15) return;
+                gameState.player.mp -= 15;
+                createVisualEffect(playerMesh.position, 0xa855f7, 6);
+
+                gameState.enemies.forEach(enemy => {
+                    const dist = playerMesh.position.distanceTo(enemy.mesh.position);
+                    if (dist < 8) {
+                        const dmg = 35;
+                        enemy.hp -= dmg;
+                        createFloatingText(`KARMA -${dmg}`, enemy.mesh.position, '#c084fc');
+                    }
+                });
+            } else if (skillNum === 2) { // Humility Heal
+                if (gameState.player.mp < 20) return;
+                gameState.player.mp -= 20;
+                gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + 30);
+                createVisualEffect(playerMesh.position, 0x3b82f6, 4);
+            }
+            updateHUD();
+        }
+
+        function usePotion() {
+            if (gameState.player.potions > 0 && gameState.player.hp < gameState.player.maxHp) {
+                gameState.player.potions--;
+                gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + 50);
+                createVisualEffect(playerMesh.position, 0x10b981, 3);
+                updateHUD();
+            }
+        }
+
+        function checkLevelUp() {
+            if (gameState.player.exp >= gameState.player.maxExp) {
+                gameState.player.level++;
+                gameState.player.exp -= gameState.player.maxExp;
+                gameState.player.maxExp += 50;
+                gameState.player.maxHp += 20;
+                gameState.player.hp = gameState.player.maxHp;
+                gameState.player.atk += 5;
+                createFloatingText("LEVEL UP!", playerMesh.position, '#f59e0b');
+            }
+        }
+
+        function createVisualEffect(pos, colorHex, radius = 2) {
+            const pGeo = new THREE.BufferGeometry();
+            const count = 30;
+            const posArray = new Float32Array(count * 3);
+            for (let i = 0; i < count * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * radius;
+            }
+            pGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const pMat = new THREE.PointsMaterial({ color: colorHex, size: 0.3 });
+            const pMesh = new THREE.Points(pGeo, pMat);
+            pMesh.position.copy(pos);
+            pMesh.position.y += 1;
+            scene.add(pMesh);
+
+            setTimeout(() => scene.remove(pMesh), 400);
+        }
+
+        function createFloatingText(text, pos, color) {
+            const elem = document.createElement('div');
+            elem.className = 'absolute font-black text-sm pointer-events-none transition-all duration-700';
+            elem.style.color = color;
+            elem.innerText = text;
+            document.body.appendChild(elem);
+
+            const screenPos = pos.clone().project(camera);
+            const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight;
+
+            elem.style.left = `${x}px`;
+            elem.style.top = `${y}px`;
+
+            setTimeout(() => {
+                elem.style.top = `${y - 40}px`;
+                elem.style.opacity = '0';
+            }, 50);
+
+            setTimeout(() => elem.remove(), 750);
+        }
+
+        function updateHUD() {
+            const p = gameState.player;
+            document.getElementById('hpFill').style.width = `${(p.hp / p.maxHp) * 100}%`;
+            document.getElementById('hpText').innerText = `${p.hp} / ${p.maxHp}`;
+
+            document.getElementById('mpFill').style.width = `${(p.mp / p.maxMp) * 100}%`;
+            document.getElementById('mpText').innerText = `${p.mp} / ${p.maxMp}`;
+
+            document.getElementById('expFill').style.width = `${(p.exp / p.maxExp) * 100}%`;
+            document.getElementById('playerLevelBadge').innerText = `Lv.${p.level}`;
+            document.getElementById('playerClassTitle').innerText = p.classTitle;
+            document.getElementById('potionCountBadge').innerText = p.potions;
+
+            document.getElementById('statClass').innerText = p.classTitle;
+            document.getElementById('statAtk').innerText = p.atk;
+            document.getElementById('statDef').innerText = p.def;
+        }
+
+        function renderMinimap() {
+            minimapCtx.clearRect(0, 0, 150, 150);
+            const centerX = 75;
+            const centerY = 75;
+            const scale = 1.5;
+
+            // Player Marker
+            minimapCtx.fillStyle = '#f59e0b';
+            minimapCtx.beginPath();
+            minimapCtx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+
+            // Polymer NPC
+            const polyX = centerX + (polymerMesh.position.x - gameState.player.position.x) * scale;
+            const polyY = centerY + (polymerMesh.position.z - gameState.player.position.z) * scale;
+            minimapCtx.fillStyle = '#a855f7';
+            minimapCtx.beginPath();
+            minimapCtx.arc(polyX, polyY, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+
+            // Enemies
+            gameState.enemies.forEach(e => {
+                if (e.hp > 0) {
+                    const ex = centerX + (e.mesh.position.x - gameState.player.position.x) * scale;
+                    const ey = centerY + (e.mesh.position.z - gameState.player.position.z) * scale;
+                    minimapCtx.fillStyle = '#ef4444';
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(ex, ey, 3, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            updatePlayerMovement();
+            renderMinimap();
+
+            // Slowly regenerate MP
+            if (gameState.player.mp < gameState.player.maxMp) {
+                gameState.player.mp = Math.min(gameState.player.maxMp, gameState.player.mp + 0.05);
+                updateHUD();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function toggleModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.toggle('hidden');
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function restartGame() {
+            location.reload();
+        }
+
+        // Initialize on Load
+        window.onload = () => {
+            initEngine();
+            updateHUD();
+            // Populate initial backpack items
+            const grid = document.getElementById('inventoryGrid');
+            const items = ['🧪 Potions x3', '📖 Book of Wisdom', '📜 Polymer Charm'];
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'p-2 bg-slate-900 border border-slate-700 rounded-lg text-[10px] text-center text-amber-200 font-semibold';
+                div.innerText = item;
+                grid.appendChild(div);
+            });
+        };
+    </script>
+</body>
+</html>
